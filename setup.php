@@ -46,6 +46,30 @@ if( $DBMS == 'MySQL' ) {
 $git_ref = "<em>Unknown</em><br><br>";
 $mod_rewrite = "<em>Unknown</em><br>";
 
+
+if (function_exists('apache_get_modules')) {
+	if (in_array('mod_rewrite', apache_get_modules())) {
+		$mod_rewrite = "<em><span class='success'>Enabled</span></em><br>";
+	} else {
+		$mod_rewrite = "<em><span class='failure'>Not Enabled</span></em><br>";
+	}
+} else {
+	if (PHP_OS == "Linux") {
+		# Debian based systems
+		$out = shell_exec ("apachectl -M | grep rewrite_module");
+
+		# RHEL based ssytems
+		$out1 = shell_exec ("/usr/sbin/httpd -M | grep rewrite_module");
+
+		if ($out =="" && $out1 == "") {
+			$mod_rewrite = "<em><span class='failure'>Not Enabled</span></em><br>";
+		} else {
+			$mod_rewrite = "<em><span class='success'>Enabled</span></em><br>";
+		}
+	}
+}
+
+
 if (PHP_OS == "Linux") {
 	if (is_dir (".git")) {
 		$git_log = shell_exec ("git -c 'safe.directory=*' log -1");
@@ -54,13 +78,6 @@ if (PHP_OS == "Linux") {
 			$date = str_replace ("Date: ", "Date: <em>", $tmp[2]);
 			$git_ref = "<ul><li>" . str_replace ("commit ", "Git reference: <em>", $tmp[0]) . "</em></li><li>" . $date . "</em></li></ul>";
 		}
-	}
-
-	$out = shell_exec ("apachectl -M | grep rewrite_module");
-	if ($out == "") {
-		$mod_rewrite = "<em><span class='failure'>Not Enabled</span></em><br>";
-	} else {
-		$mod_rewrite = "<em><span class='success'>Enabled</span></em><br>";
 	}
 }
 
