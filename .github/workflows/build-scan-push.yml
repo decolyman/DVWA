@@ -13,6 +13,8 @@ permissions:
 env:
   AWS_REGION: us-east-2                     # match the region your Module 2 ECS/EKS environment lives in
   ECR_REPOSITORY: dvwa-upwind-demo          # must already exist, or add a create-repo step below
+  ECS_CLUSTER: ecs-fargate-lab
+  ECS_SERVICE: dvwa-upwind-demo
   IMAGE_TAG: ${{ github.sha }}
 
 jobs:
@@ -51,7 +53,9 @@ jobs:
           upwind_client_secret: ${{ secrets.UPWIND_CLIENT_SECRET }}
           docker_image: '${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}'
           pull_image: false
-          # Uncomment to fail the pipeline on Upwind's deployment recommendation:
+          # Gate intentionally left disabled — we want vulnerable builds to still deploy so the
+          # runtime correlation / Deployed counts can be demoed against a real flagged image.
+          # Uncomment to fail the pipeline on Upwind's deployment recommendation instead:
           # block_on: do_not_deploy   # or: deploy_with_caution
           add_comment: ${{ github.event_name == 'pull_request' }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
@@ -63,12 +67,20 @@ jobs:
           docker push ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}
           docker push ${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:latest
 
-      # --- Deployment step (placeholder) ---
-      # Wire this to your Module 2 ECS service once you're ready to demo runtime correlation:
-      # - name: Deploy to ECS
-      #   run: |
-      #     aws ecs update-service \
-      #       --cluster <your-ecs-cluster> \
-      #       --service <your-ecs-service> \
-      #       --force-new-deployment \
-      #       --region ${{ env.AWS_REGION }}
+      # --- Publish event: tells Upwind this exact digest is now live, so Code can correlate it ---
+      - name: Upwind Security Publish Event
+        uses: upwindsecurity/shiftleft-create-image-publish-event-action@main
+        with:
+          upwind_client_id: ${{ secrets.UPWIND_CLIENT_ID }}
+          upwind_client_secret: ${{ secrets.UPWIND_CLIENT_SECRET }}
+          docker_image: '${{ steps.ecr-login.outputs.registry }}/${{ env.ECR_REPOSITORY }}:${{ env.IMAGE_TAG }}'
+          pull_image: false
+
+      # --- Deployment step: force the ECS service to actually pick up the new image ---
+      - name: Deploy to ECS
+        run: |
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --force-new-deployment \
+            --region ${{ env.AWS_REGION }}
